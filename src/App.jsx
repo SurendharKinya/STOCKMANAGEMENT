@@ -1,15 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { supabase } from './supabase'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Product from './pages/Products'
 import Profile from './pages/Profile'
 import './App.css'
-
-// SheetDB configuration
-const USERS_SHEET_URL = 'https://sheetdb.io/api/v1/2h9lh0lt9x8j7'
-const PRODUCTS_SHEET_URL = 'https://sheetdb.io/api/v1/b32howf8952yl'
 
 // Define all products globally
 const allProducts = [
@@ -41,8 +38,11 @@ function AppContent() {
   }, [])
 
   useEffect(() => {
-    checkAuthStatus()
-    fetchProducts()
+    const init = async () => {
+      await checkAuthStatus()
+      await fetchProducts()
+    }
+    init()
   }, [])
 
   const checkAuthStatus = () => {
@@ -62,24 +62,32 @@ function AppContent() {
   const fetchProducts = async () => {
     try {
       setLoading(true)
-      const response = await fetch(PRODUCTS_SHEET_URL)
-      if (!response.ok) {
-        throw new Error('Failed to fetch products')
-      }
-      const data = await response.json()
       
-      const transformedProducts = transformProductsData(data)
+      // Fetch all products with their parts from Supabase
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (productsError) throw productsError
+
+      // Transform the data to match our application structure
+      const transformedProducts = transformProductsData(productsData || [])
       setProducts(transformedProducts)
     } catch (error) {
       console.error('Error fetching products:', error)
       // Start with empty state
-      setProducts(allProducts.map(product => ({ ...product, parts: [] })))
+      setProducts(allProducts.map(product => ({ 
+        id: product.id, 
+        name: product.name, 
+        parts: [] 
+      })))
     } finally {
       setLoading(false)
     }
   }
 
-  const transformProductsData = (sheetData) => {
+  const transformProductsData = (dbData) => {
     const productsMap = {}
     
     // Initialize all products with empty parts
@@ -91,63 +99,59 @@ function AppContent() {
       }
     })
     
-    // Fill with actual data from SheetDB
-    if (sheetData && sheetData.length > 0) {
-      sheetData.forEach(item => {
-        if (productsMap[item.productName] && item.id && item.partName) {
-          // Check for duplicates before adding
-          const existingPart = productsMap[item.productName].parts.find(
-            part => part.partNo === item.partNo
-          )
-          
-          if (!existingPart) {
-            productsMap[item.productName].parts.push({
-              id: item.id,
-              name: item.partName,
-              partNo: item.partNo,
-              quantity: parseInt(item.quantity) || 0,
-              vendor: item.vendor,
-              isNew: item.isNew === 'true',
-              createdAt: item.createdAt,
-              updatedAt: item.updatedAt
-            })
-          }
-        }
-      })
-    }
+    // Group parts by product name
+    dbData.forEach(item => {
+      if (productsMap[item.product_name]) {
+        productsMap[item.product_name].parts.push({
+          id: item.id,
+          name: item.part_name,
+          partNo: item.part_number,
+          quantity: item.quantity || 0,
+          vendor: item.vendor,
+          isNew: item.is_new || false,
+          createdAt: item.created_at,
+          updatedAt: item.updated_at
+        })
+      }
+    })
     
     return Object.values(productsMap)
   }
 
   const login = async (email, password) => {
     try {
-      // Try SheetDB first
-      const response = await fetch(`${USERS_SHEET_URL}/search?email=${encodeURIComponent(email)}`)
-      if (response.ok) {
-        const users = await response.json()
-        
-        if (users && users.length > 0) {
-          const foundUser = users[0]
-          if (foundUser.password === password) {
-            const userData = {
-              id: foundUser.id,
-              name: foundUser.name,
-              email: foundUser.email,
-              role: foundUser.role
-            }
-            setUser(userData)
-            localStorage.setItem('stockUser', JSON.stringify(userData))
-            showNotification('Login successful!', 'success')
-            return { success: true }
-          } else {
-            return { success: false, message: 'Invalid password' }
-          }
-        } else {
-          return { success: false, message: 'User not found' }
-        }
-      }
+      console.log('Attempting login for email:', email)
       
-      return { success: false, message: 'Login failed. Please try again.' }
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email.toLowerCase().trim())
+        .maybeSingle()
+
+      if (error) {
+        console.error('Supabase query error:', error)
+        throw error
+      }
+
+      if (data) {
+        // Direct password comparison (plain text for demo)
+        if (data.password === password) {
+          const userData = {
+            id: data.id,
+            name: data.name,
+            email: data.email,
+            role: data.role
+          }
+          setUser(userData)
+          localStorage.setItem('stockUser', JSON.stringify(userData))
+          showNotification(`Welcome back, ${data.name}!`, 'success')
+          return { success: true }
+        } else {
+          return { success: false, message: 'Invalid password' }
+        }
+      } else {
+        return { success: false, message: 'User not found' }
+      }
     } catch (error) {
       console.error('Login error:', error)
       return { success: false, message: 'Login failed. Please try again.' }
@@ -156,41 +160,45 @@ function AppContent() {
 
   const signup = async (userData) => {
     try {
+      console.log('Attempting signup for email:', userData.email)
+      
       // Check if user already exists
-      const checkResponse = await fetch(`${USERS_SHEET_URL}/search?email=${encodeURIComponent(userData.email)}`)
-      if (checkResponse.ok) {
-        const existingUsers = await checkResponse.json()
-        if (existingUsers && existingUsers.length > 0) {
-          return { success: false, message: 'User with this email already exists' }
-        }
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', userData.email.toLowerCase().trim())
+        .maybeSingle()
+
+      if (checkError) {
+        console.error('Error checking existing user:', checkError)
+        throw checkError
+      }
+
+      if (existingUser) {
+        return { success: false, message: 'User with this email already exists' }
       }
 
       const newUser = {
-        id: Date.now().toString(),
-        name: userData.name,
-        email: userData.email,
-        password: userData.password,
-        role: userData.role,
-        createdAt: new Date().toISOString()
+        name: userData.name.trim(),
+        email: userData.email.toLowerCase().trim(),
+        password: userData.password, // Store plain text for demo
+        role: userData.role || 'staff',
+        created_at: new Date().toISOString()
       }
 
-      const response = await fetch(USERS_SHEET_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          data: newUser
-        })
-      })
-      
-      if (response.ok) {
-        console.log('User created successfully in SheetDB')
-        showNotification('Account created successfully!', 'success')
-        return { success: true }
-      } else {
-        throw new Error('Failed to create user in SheetDB')
+      const { data, error } = await supabase
+        .from('users')
+        .insert([newUser])
+        .select()
+
+      if (error) {
+        console.error('Supabase insert error:', error)
+        throw error
       }
+
+      console.log('User created successfully:', data)
+      showNotification('Account created successfully! Please login.', 'success')
+      return { success: true }
     } catch (error) {
       console.error('Signup error:', error)
       return { success: false, message: 'Signup failed. Please try again.' }
@@ -211,82 +219,82 @@ function AppContent() {
         product.id === productId ? { ...product, parts: updatedParts } : product
       ))
 
-      // Sync with SheetDB in background
-      syncProductWithSheetDB(productId, updatedParts)
+      // Sync with Supabase
+      await syncProductWithSupabase(productId, updatedParts)
+      showNotification('Product updated successfully', 'success')
       return { success: true }
     } catch (error) {
       console.error('Error updating product:', error)
+      showNotification('Failed to update product', 'error')
       return { success: false, message: 'Failed to update product' }
     }
   }
 
-  const syncProductWithSheetDB = async (productId, parts) => {
+  const syncProductWithSupabase = async (productId, parts) => {
     const product = allProducts.find(p => p.id === productId)
     if (!product) return
 
     try {
-      // Get existing parts for this product to avoid duplicates
-      const existingResponse = await fetch(`${PRODUCTS_SHEET_URL}/search?productName=${encodeURIComponent(product.name)}`)
-      let existingParts = []
-      
-      if (existingResponse.ok) {
-        existingParts = await existingResponse.json() || []
-      }
+      // Get existing parts for this product
+      const { data: existingParts, error: fetchError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('product_name', product.name)
 
-      // Delete only parts that are no longer in the current parts list
-      const currentPartIds = parts.map(part => part.id.toString())
-      const partsToDelete = existingParts.filter(part => !currentPartIds.includes(part.id))
-      
+      if (fetchError) throw fetchError
+
+      const currentPartIds = parts.map(part => part.id)
+      const partsToDelete = (existingParts || [])
+        .filter(part => !currentPartIds.includes(part.id))
+        .map(part => part.id)
+
       // Delete obsolete parts
-      for (const part of partsToDelete) {
-        await fetch(`${PRODUCTS_SHEET_URL}/id/${part.id}`, {
-          method: 'DELETE'
-        })
+      if (partsToDelete.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('products')
+          .delete()
+          .in('id', partsToDelete)
+
+        if (deleteError) throw deleteError
       }
 
       // Update or create parts
       for (const part of parts) {
         const partData = {
-          id: part.id.toString(),
-          productName: product.name,
-          partName: part.name,
-          partNo: part.partNo,
-          quantity: part.quantity.toString(),
+          product_name: product.name,
+          part_name: part.name,
+          part_number: part.partNo,
+          quantity: part.quantity,
           vendor: part.vendor,
-          isNew: part.isNew ? 'true' : 'false',
-          createdAt: part.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          is_new: part.isNew || false,
+          updated_at: new Date().toISOString()
         }
 
-        const existingPart = existingParts.find(p => p.id === part.id.toString())
+        const existingPart = (existingParts || []).find(p => p.id === part.id)
         
         if (existingPart) {
           // Update existing part
-          await fetch(`${PRODUCTS_SHEET_URL}/id/${part.id}`, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              data: partData
-            })
-          })
+          const { error: updateError } = await supabase
+            .from('products')
+            .update(partData)
+            .eq('id', part.id)
+
+          if (updateError) throw updateError
         } else {
-          // Create new part
-          await fetch(PRODUCTS_SHEET_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              data: partData
-            })
-          })
+          // Create new part - let Supabase generate the ID
+          const { error: insertError } = await supabase
+            .from('products')
+            .insert([partData])
+
+          if (insertError) throw insertError
         }
       }
+
+      // Refresh products to get new IDs
+      await fetchProducts()
     } catch (error) {
-      console.error('Error syncing with SheetDB:', error)
-      // Don't throw error to prevent UI disruption
+      console.error('Error syncing with Supabase:', error)
+      throw error
     }
   }
 
@@ -333,29 +341,7 @@ function AppContent() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     )
-  }, [authChecked, user, location.pathname, loading, products, login, signup, updateProduct])
-
-  const getNavIcon = (page) => {
-    switch (page) {
-      case 'add-item': return 'fas fa-boxes';
-      case 'bom': return 'fas fa-sitemap';
-      case 'purchase-order': return 'fas fa-file-invoice';
-      case 'generate-intent': return 'fas fa-file-invoice-dollar';
-      case 'vendors': return 'fas fa-truck';
-      default: return 'fas fa-box';
-    }
-  }
-
-  const getNavText = (page) => {
-    switch (page) {
-      case 'add-item': return 'Manage Items';
-      case 'bom': return 'BOM Management';
-      case 'purchase-order': return 'Purchase Orders';
-      case 'generate-intent': return 'Generate Intent';
-      case 'vendors': return 'Vendors';
-      default: return 'Manage Items';
-    }
-  }
+  }, [authChecked, user, location.pathname, loading, products])
 
   return (
     <div className="app">

@@ -36,6 +36,12 @@ const Signup = ({ onSignup }) => {
       return
     }
 
+    if (formData.name.trim().length < 2) {
+      setError('Name must be at least 2 characters')
+      setLoading(false)
+      return
+    }
+
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match')
       setLoading(false)
@@ -48,8 +54,21 @@ const Signup = ({ onSignup }) => {
       return
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(formData.email)) {
+      setError('Please enter a valid email address')
+      setLoading(false)
+      return
+    }
+
     try {
-      const result = await onSignup(formData)
+      const result = await onSignup({
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        role: formData.role
+      })
+      
       if (result.success) {
         setSuccess('Account created successfully! Redirecting to login...')
         setTimeout(() => {
@@ -91,6 +110,7 @@ const Signup = ({ onSignup }) => {
               required
               disabled={loading}
               placeholder="Enter your full name"
+              autoComplete="name"
             />
           </div>
 
@@ -107,6 +127,7 @@ const Signup = ({ onSignup }) => {
               required
               disabled={loading}
               placeholder="Enter your email"
+              autoComplete="email"
             />
           </div>
 
@@ -146,6 +167,7 @@ const Signup = ({ onSignup }) => {
               required
               disabled={loading}
               placeholder="Enter your password (min. 6 characters)"
+              autoComplete="new-password"
             />
           </div>
 
@@ -162,6 +184,7 @@ const Signup = ({ onSignup }) => {
               required
               disabled={loading}
               placeholder="Confirm your password"
+              autoComplete="new-password"
             />
           </div>
 

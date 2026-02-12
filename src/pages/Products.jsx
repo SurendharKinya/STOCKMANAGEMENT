@@ -68,7 +68,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
     if (!product) return false
     
     return product.parts.some(part => 
-      part.partNo === partNo && part.id !== excludePartId
+      part.partNo.toLowerCase() === partNo.toLowerCase() && part.id !== excludePartId
     )
   }, [products])
 
@@ -104,12 +104,12 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
     setPartToDelete(null)
   }
 
-  // Add Part with optimized loading state
+  // Add Part
   const handleAddPart = async () => {
     if (!currentProduct) return
     
     // Validation
-    if (!newPart.name || !newPart.partNo || !newPart.vendor) {
+    if (!newPart.name.trim() || !newPart.partNo.trim() || !newPart.vendor.trim()) {
       showAlert('Please fill all required fields')
       return
     }
@@ -136,7 +136,11 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
       
       const partToAdd = {
         ...newPart,
-        id: Date.now().toString(),
+        name: newPart.name.trim(),
+        partNo: newPart.partNo.trim(),
+        vendor: newPart.vendor.trim(),
+        quantity: parseInt(newPart.quantity) || 0,
+        id: Date.now().toString(), // Temporary ID
         createdAt: new Date().toISOString(),
         isNew: true
       }
@@ -157,12 +161,12 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
     }
   }
 
-  // Edit Part with optimized loading state
+  // Edit Part
   const handleEditPart = async () => {
     if (!currentProduct || !currentPart) return
 
     // Validation
-    if (!editPart.name || !editPart.partNo || !editPart.vendor) {
+    if (!editPart.name.trim() || !editPart.partNo.trim() || !editPart.vendor.trim()) {
       showAlert('Please fill all required fields')
       return
     }
@@ -181,15 +185,19 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
     setLoadingStates(prev => ({ ...prev, [`edit-${currentPart.id}`]: true }))
 
     try {
+      const product = products.find(p => p.id === currentProduct.id)
+      if (!product) return
+      
       const updatedPartData = {
         ...editPart,
+        name: editPart.name.trim(),
+        partNo: editPart.partNo.trim(),
+        vendor: editPart.vendor.trim(),
+        quantity: parseInt(editPart.quantity) || 0,
         updatedAt: new Date().toISOString(),
         isNew: false
       }
 
-      const product = products.find(p => p.id === currentProduct.id)
-      if (!product) return
-      
       const updatedParts = product.parts.map(p => 
         p.id === currentPart.id ? { ...p, ...updatedPartData } : p
       )
@@ -209,7 +217,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
     }
   }
 
-  // Delete Part with optimized loading state
+  // Delete Part
   const handleDeletePart = async () => {
     if (!currentProduct || !partToDelete) return
 
@@ -257,7 +265,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
     }
   }
 
-  // Get stock status with memoization
+  // Get stock status
   const getStockStatus = useCallback((quantity, isNew) => {
     if (isNew) return 'new'
     if (quantity === 0) return 'out-of-stock'
@@ -309,6 +317,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
                     onChange={(e) => setNewPart(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="Enter part name"
                     className="form-input"
+                    autoFocus
                   />
                 </div>
                 <div className="form-group">
@@ -389,6 +398,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
                     value={editPart.name}
                     onChange={(e) => setEditPart(prev => ({ ...prev, name: e.target.value }))}
                     className="form-input"
+                    autoFocus
                   />
                 </div>
                 <div className="form-group">

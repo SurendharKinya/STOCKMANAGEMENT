@@ -32,8 +32,7 @@ const Login = ({ onLogin }) => {
     try {
       const result = await onLogin(formData.email, formData.password)
       if (result.success) {
-        // Navigation will be handled by AppContent's redirect logic
-        // The page will automatically redirect due to user state change
+        // Navigation will be handled by AppContent's redirect
       } else {
         setError(result.message || 'Login failed. Please try again.')
       }
@@ -70,6 +69,7 @@ const Login = ({ onLogin }) => {
               required
               disabled={loading}
               placeholder="Enter your email"
+              autoComplete="email"
             />
           </div>
           
@@ -86,6 +86,7 @@ const Login = ({ onLogin }) => {
               required
               disabled={loading}
               placeholder="Enter your password"
+              autoComplete="current-password"
             />
           </div>
 
