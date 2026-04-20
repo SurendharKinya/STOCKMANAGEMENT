@@ -23,6 +23,7 @@ const Login = ({ onLogin }) => {
     
     if (!formData.email || !formData.password) {
       setError('Please fill in all fields')
+    
       return
     }
 

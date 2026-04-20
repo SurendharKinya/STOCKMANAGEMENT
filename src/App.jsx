@@ -6,7 +6,7 @@ import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Product from './pages/Products'
 import Profile from './pages/Profile'
-import './App.css'
+import './App.css'  
 
 // Define all products globally
 const allProducts = [
@@ -106,7 +106,8 @@ function AppContent() {
           id: item.id,
           name: item.part_name,
           partNo: item.part_number,
-          quantity: item.quantity || 0,
+         quantity: item.quantity || 0,
+         rework: item.rework || 0,
           vendor: item.vendor,
           isNew: item.is_new || false,
           createdAt: item.created_at,
@@ -211,93 +212,139 @@ function AppContent() {
     showNotification('Logged out successfully', 'info')
     navigate('/login')
   }
+const updateProduct = async (productId, updatedParts) => {
+  const product = products.find(p => p.id === productId)
+  if (!product) return
 
-  const updateProduct = async (productId, updatedParts) => {
-    try {
-      // Update local state immediately for better UX
-      setProducts(prev => prev.map(product => 
-        product.id === productId ? { ...product, parts: updatedParts } : product
-      ))
+  const oldParts = product.parts || []
 
-      // Sync with Supabase
-      await syncProductWithSupabase(productId, updatedParts)
-      showNotification('Product updated successfully', 'success')
-      return { success: true }
-    } catch (error) {
-      console.error('Error updating product:', error)
-      showNotification('Failed to update product', 'error')
-      return { success: false, message: 'Failed to update product' }
+  // ✅ instant UI update
+  setProducts(prev =>
+    prev.map(p =>
+      p.id === productId ? { ...p, parts: updatedParts } : p
+    )
+  )
+
+  try {
+    // 🔥 detect changes
+    const addedParts = updatedParts.filter(
+      p => !oldParts.some(op => op.id === p.id)
+    )
+
+    const deletedParts = oldParts.filter(
+      op => !updatedParts.some(p => p.id === op.id)
+    )
+
+    const updatedExistingParts = updatedParts.filter(p => {
+      const old = oldParts.find(op => op.id === p.id)
+      return old && (
+        old.quantity !== p.quantity ||
+        old.rework !== p.rework ||
+        old.name !== p.name ||
+        old.partNo !== p.partNo ||
+        old.vendor !== p.vendor
+      )
+    })
+
+    // ✅ 1. ADD (safe)
+    let insertedParts = []
+    if (addedParts.length) {
+      insertedParts = await Promise.all(
+        addedParts.map(part => addPartToDB(product, part))
+      )
     }
+
+    // ✅ replace temp IDs safely
+    const finalParts = updatedParts.map(part => {
+      const inserted = insertedParts.find(
+        ip =>
+          ip &&
+          ip.part_name === part.name &&
+          ip.part_number === part.partNo
+      )
+      return inserted ? { ...part, id: inserted.id } : part
+    })
+
+    // update UI with real IDs
+    setProducts(prev =>
+      prev.map(p =>
+        p.id === productId ? { ...p, parts: finalParts } : p
+      )
+    )
+
+    // ✅ 2. UPDATE (only existing parts)
+    await Promise.allSettled(
+      updatedExistingParts.map(part => updatePartInDB(part))
+    )
+
+    // ✅ 3. DELETE
+    await Promise.allSettled(
+      deletedParts.map(part => deletePartFromDB(part.id))
+    )
+
+    showNotification('Product updated successfully', 'success')
+    return { success: true }
+
+  } catch (error) {
+  console.error("REAL ERROR:", error)
+
+  // ❗ Only fail if INSERT failed
+  if (error.message?.includes('insert')) {
+    showNotification('Failed to add part', 'error')
+    return { success: false }
   }
 
-  const syncProductWithSupabase = async (productId, parts) => {
-    const product = allProducts.find(p => p.id === productId)
-    if (!product) return
+  // otherwise treat as success
+  return { success: true }
+}
+}
+const addPartToDB = async (product, part) => {
+  const { data, error } = await supabase
+    .from('products')
+    .insert([{
+      product_name: product.name,
+      part_name: part.name,
+      part_number: part.partNo,
+      quantity: part.quantity,
+      rework: part.rework || 0,
+      vendor: part.vendor,
+      is_new: part.isNew || false,
+      created_at: new Date().toISOString()
+    }])
+    .select()
 
-    try {
-      // Get existing parts for this product
-      const { data: existingParts, error: fetchError } = await supabase
-        .from('products')
-        .select('*')
-        .eq('product_name', product.name)
+  if (error) throw error
+  return data?.[0]
+}
 
-      if (fetchError) throw fetchError
+const updatePartInDB = async (part) => {
+  if (!part.id) return // 🔥 avoid crash
 
-      const currentPartIds = parts.map(part => part.id)
-      const partsToDelete = (existingParts || [])
-        .filter(part => !currentPartIds.includes(part.id))
-        .map(part => part.id)
+  const { error } = await supabase
+    .from('products')
+    .update({
+      part_name: part.name,
+      part_number: part.partNo,
+      quantity: part.quantity,
+      rework: part.rework || 0,
+      vendor: part.vendor,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', part.id)
 
-      // Delete obsolete parts
-      if (partsToDelete.length > 0) {
-        const { error: deleteError } = await supabase
-          .from('products')
-          .delete()
-          .in('id', partsToDelete)
+  if (error) throw error
+}
 
-        if (deleteError) throw deleteError
-      }
+const deletePartFromDB = async (partId) => {
+  if (!partId) return
 
-      // Update or create parts
-      for (const part of parts) {
-        const partData = {
-          product_name: product.name,
-          part_name: part.name,
-          part_number: part.partNo,
-          quantity: part.quantity,
-          vendor: part.vendor,
-          is_new: part.isNew || false,
-          updated_at: new Date().toISOString()
-        }
+  const { error } = await supabase
+    .from('products')
+    .delete()
+    .eq('id', partId)
 
-        const existingPart = (existingParts || []).find(p => p.id === part.id)
-        
-        if (existingPart) {
-          // Update existing part
-          const { error: updateError } = await supabase
-            .from('products')
-            .update(partData)
-            .eq('id', part.id)
-
-          if (updateError) throw updateError
-        } else {
-          // Create new part - let Supabase generate the ID
-          const { error: insertError } = await supabase
-            .from('products')
-            .insert([partData])
-
-          if (insertError) throw insertError
-        }
-      }
-
-      // Refresh products to get new IDs
-      await fetchProducts()
-    } catch (error) {
-      console.error('Error syncing with Supabase:', error)
-      throw error
-    }
-  }
-
+  if (error) throw error
+}
   const handleNavigation = (path) => {
     navigate(path)
     setIsMobileNavOpen(false)

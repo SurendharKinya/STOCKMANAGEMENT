@@ -12,8 +12,8 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
   const [showDeletePopup, setShowDeletePopup] = useState(false)
   const [currentProduct, setCurrentProduct] = useState(null)
   const [currentPart, setCurrentPart] = useState(null)
-  const [newPart, setNewPart] = useState({ name: '', partNo: '', quantity: 0, vendor: '' })
-  const [editPart, setEditPart] = useState({ name: '', partNo: '', quantity: 0, vendor: '' })
+  const [newPart, setNewPart] = useState({ name: '', partNo: '', quantity: 0, rework: 0, vendor: '' })
+  const [editPart, setEditPart] = useState({ name: '', partNo: '', quantity: 0, rework: 0, vendor: '' })
   const [partToDelete, setPartToDelete] = useState(null)
 
   const location = useLocation()
@@ -33,7 +33,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
   }, [])
 
   // Memoized filtered products for performance
-  const filteredProducts = useMemo(() => 
+  const filteredProducts = useMemo(() =>
     allProducts.filter(product => {
       if (selectedProduct === 'all') return true
       return product.name === selectedProduct
@@ -44,9 +44,9 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
   const getFilteredParts = useCallback((parts) => {
     return parts.filter(part => {
       const matchesSearch = part.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          part.partNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          part.vendor?.toLowerCase().includes(searchTerm.toLowerCase())
-      
+        part.partNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        part.vendor?.toLowerCase().includes(searchTerm.toLowerCase())
+
       let matchesStock = true
       if (stockFilter === 'outOfStock') {
         matchesStock = part.quantity === 0
@@ -57,7 +57,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
       } else if (stockFilter === 'incomingStock') {
         matchesStock = part.isNew === true
       }
-      
+
       return matchesSearch && matchesStock
     })
   }, [searchTerm, stockFilter])
@@ -66,8 +66,8 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
   const checkDuplicatePartNo = useCallback((productId, partNo, excludePartId = null) => {
     const product = products.find(p => p.id === productId)
     if (!product) return false
-    
-    return product.parts.some(part => 
+
+    return product.parts.some(part =>
       part.partNo.toLowerCase() === partNo.toLowerCase() && part.id !== excludePartId
     )
   }, [products])
@@ -75,7 +75,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
   // Open Add Part Popup
   const openAddPopup = (product) => {
     setCurrentProduct(product)
-    setNewPart({ name: '', partNo: '', quantity: 0, vendor: '' })
+    setNewPart({ name: '', partNo: '', quantity: 0, rework: 0, vendor: '' })
     setShowAddPopup(true)
   }
 
@@ -107,7 +107,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
   // Add Part
   const handleAddPart = async () => {
     if (!currentProduct) return
-    
+
     // Validation
     if (!newPart.name.trim() || !newPart.partNo.trim() || !newPart.vendor.trim()) {
       showAlert('Please fill all required fields')
@@ -128,12 +128,12 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
     setLoadingStates(prev => ({ ...prev, [`add-${currentProduct.id}`]: true }))
 
     try {
-      const product = products.find(p => p.id === currentProduct.id) || { 
-        id: currentProduct.id, 
-        name: currentProduct.name, 
-        parts: [] 
+      const product = products.find(p => p.id === currentProduct.id) || {
+        id: currentProduct.id,
+        name: currentProduct.name,
+        parts: []
       }
-      
+
       const partToAdd = {
         ...newPart,
         name: newPart.name.trim(),
@@ -147,13 +147,9 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
 
       const updatedParts = [...product.parts, partToAdd]
       const result = await onUpdateProduct(currentProduct.id, updatedParts)
-      
-      if (result.success) {
-        showAlert('Part added successfully!', 'success')
-        closePopups()
-      } else {
-        showAlert(result.message || 'Failed to add part')
-      }
+
+      showAlert('Part added successfully!', 'success')
+      closePopups()
     } catch (error) {
       showAlert('Error adding part. Please try again.')
     } finally {
@@ -187,7 +183,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
     try {
       const product = products.find(p => p.id === currentProduct.id)
       if (!product) return
-      
+
       const updatedPartData = {
         ...editPart,
         name: editPart.name.trim(),
@@ -198,12 +194,12 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
         isNew: false
       }
 
-      const updatedParts = product.parts.map(p => 
+      const updatedParts = product.parts.map(p =>
         p.id === currentPart.id ? { ...p, ...updatedPartData } : p
       )
-      
+
       const result = await onUpdateProduct(currentProduct.id, updatedParts)
-      
+
       if (result.success) {
         showAlert('Part updated successfully!', 'success')
         closePopups()
@@ -226,10 +222,10 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
     try {
       const product = products.find(p => p.id === currentProduct.id)
       if (!product) return
-      
+
       const updatedParts = product.parts.filter(p => p.id !== partToDelete.id)
       const result = await onUpdateProduct(currentProduct.id, updatedParts)
-      
+
       if (result.success) {
         showAlert('Part deleted successfully!', 'success')
         closePopups()
@@ -247,23 +243,44 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
   const handleQuickQuantityUpdate = async (productId, partId, newQuantity) => {
     if (newQuantity < 0) return
 
-    setLoadingStates(prev => ({ ...prev, [`quick-${partId}`]: true }))
-
     try {
       const product = products.find(p => p.id === productId)
       if (!product) return
-      
-      const updatedParts = product.parts.map(p => 
+
+      const updatedParts = product.parts.map(p =>
         p.id === partId ? { ...p, quantity: newQuantity, updatedAt: new Date().toISOString() } : p
       )
-      
+
       await onUpdateProduct(productId, updatedParts)
     } catch (error) {
       showAlert('Error updating quantity')
-    } finally {
-      setLoadingStates(prev => ({ ...prev, [`quick-${partId}`]: false }))
     }
   }
+
+  const handleReworkUpdate = useCallback(async (productId, partId, newRework) => {
+    if (newRework < 0) return
+
+    const product = products.find(p => p.id === productId)
+    if (!product) return
+
+    const updatedParts = product.parts.map(p => {
+      if (p.id === partId) {
+        const total = (p.quantity || 0) + (p.rework || 0)
+
+        if (newRework > total) return p
+
+        return {
+          ...p,
+          rework: newRework,
+          quantity: Math.max(0, total - newRework),
+          updatedAt: new Date().toISOString()
+        }
+      }
+      return p
+    })
+
+    await onUpdateProduct(productId, updatedParts)
+  }, [products])
 
   // Get stock status
   const getStockStatus = useCallback((quantity, isNew) => {
@@ -290,9 +307,8 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
       {/* Alert Notification */}
       {alert.show && (
         <div className={`alert alert-${alert.type}`}>
-          <i className={`fas ${
-            alert.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'
-          }`}></i>
+          <i className={`fas ${alert.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'
+            }`}></i>
           {alert.message}
         </div>
       )}
@@ -342,6 +358,23 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
                   />
                 </div>
                 <div className="form-group">
+                  <label>Rework</label>
+                  <input
+                    type="number"
+                    value={newPart.rework}
+                    onChange={(e) => {
+                      const newRework = Math.max(0, parseInt(e.target.value) || 0)
+                      setNewPart(prev => ({
+                        ...prev,
+                        rework: newRework,
+                        quantity: Math.max(0, prev.quantity - (newRework - prev.rework))
+                      }))
+                    }}
+                    className="form-input"
+                    min="0"
+                  />
+                </div>
+                <div className="form-group">
                   <label>Vendor *</label>
                   <input
                     type="text"
@@ -357,7 +390,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
               <button className="btn btn-secondary" onClick={closePopups}>
                 Cancel
               </button>
-              <button 
+              <button
                 className="btn btn-primary"
                 onClick={handleAddPart}
                 disabled={loadingStates[`add-${currentProduct?.id}`]}
@@ -421,6 +454,30 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
                   />
                 </div>
                 <div className="form-group">
+                  <label>Rework</label>
+                  <input
+                    type="number"
+                    value={editPart.rework}
+                    onChange={(e) => {
+                      const newRework = Math.max(0, parseInt(e.target.value) || 0)
+
+                      setEditPart(prev => {
+                        const total = (prev.quantity || 0) + (prev.rework || 0)
+
+                        // 🚨 BLOCK invalid input
+                        if (newRework > total) return prev
+
+                        return {
+                          ...prev,
+                          rework: newRework,
+                          quantity: total - newRework
+                        }
+                      })
+                    }}
+                    className="form-input"
+                  />
+                </div>
+                <div className="form-group">
                   <label>Vendor *</label>
                   <input
                     type="text"
@@ -435,7 +492,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
               <button className="btn btn-secondary" onClick={closePopups}>
                 Cancel
               </button>
-              <button 
+              <button
                 className="btn btn-primary"
                 onClick={handleEditPart}
                 disabled={loadingStates[`edit-${currentPart?.id}`]}
@@ -478,7 +535,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
               <button className="btn btn-secondary" onClick={closePopups}>
                 Cancel
               </button>
-              <button 
+              <button
                 className="btn btn-danger"
                 onClick={handleDeletePart}
                 disabled={loadingStates[`delete-${partToDelete?.id}`]}
@@ -511,7 +568,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
           {searchTerm && (
-            <button 
+            <button
               className="clear-search"
               onClick={clearSearch}
             >
@@ -519,11 +576,11 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
             </button>
           )}
         </div>
-        
+
         <div className="filter-controls">
           <div className="filter-group">
             <label><i className="fas fa-filter"></i> Product</label>
-            <select 
+            <select
               className="filter-select"
               value={selectedProduct}
               onChange={(e) => setSelectedProduct(e.target.value)}
@@ -537,7 +594,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
 
           <div className="filter-group">
             <label><i className="fas fa-box"></i> Stock Status</label>
-            <select 
+            <select
               className="filter-select"
               value={stockFilter}
               onChange={(e) => setStockFilter(e.target.value)}
@@ -554,13 +611,13 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
 
       <div className="products-grid">
         {filteredProducts.map(product => {
-          const productData = products.find(p => p.id === product.id) || { 
-            id: product.id, 
-            name: product.name, 
-            parts: [] 
+          const productData = products.find(p => p.id === product.id) || {
+            id: product.id,
+            name: product.name,
+            parts: []
           }
           const filteredParts = getFilteredParts(productData.parts)
-          
+
           return (
             <div key={product.id} className="product-card">
               <div className="product-header">
@@ -569,10 +626,10 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
                   <h3>{product.name}</h3>
                   <span className="parts-count">{productData.parts.length} parts</span>
                 </div>
-                
+
                 {user?.role === 'admin' && (
                   <div className="product-actions">
-                    <button 
+                    <button
                       className="btn btn-primary btn-sm"
                       onClick={() => openAddPopup(product)}
                     >
@@ -588,7 +645,7 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
                   <i className="fas fa-inbox"></i>
                   <p>No parts found matching your criteria.</p>
                   {user?.role === 'admin' && (
-                    <button 
+                    <button
                       className="btn btn-primary"
                       onClick={() => openAddPopup(product)}
                     >
@@ -606,7 +663,9 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
                         <th>PART NAME</th>
                         <th>PART NO</th>
                         <th>QUANTITY</th>
+                        <th>REWORK</th>
                         <th>VENDOR</th>
+                        <th>Date</th>
                         {user?.role === 'admin' && <th>ACTIONS</th>}
                       </tr>
                     </thead>
@@ -615,55 +674,71 @@ const Product = ({ products, user, onUpdateProduct, allProducts }) => {
                         <tr key={part.id} className={`part-row ${getStockStatus(part.quantity, part.isNew)}`}>
                           <td className="index-column">{index + 1}</td>
                           <td className="part-name">
-                            {part.name}
-                            {part.isNew && <span className="status-badge new">NEW</span>}
+                            <div className="part-name-wrapper">
+                              <span className="part-title">{part.name}</span>
+                              {part.isNew && <span className="status-badge new">NEW</span>}
+                            </div>
                           </td>
                           <td>{part.partNo}</td>
                           <td className="quantity-cell">
                             <div className="quantity-control">
                               {user?.role === 'admin' && (
-                                <button 
+                                <button
                                   className="quantity-btn"
                                   onClick={() => handleQuickQuantityUpdate(product.id, part.id, part.quantity - 1)}
-                                  disabled={part.quantity <= 0 || loadingStates[`quick-${part.id}`]}
+                                  disabled={part.quantity <= 0}
                                 >
                                   <i className="fas fa-minus"></i>
                                 </button>
                               )}
                               <span className={`quantity-display ${getStockStatus(part.quantity, part.isNew)}`}>
-                                {loadingStates[`quick-${part.id}`] ? (
-                                  <i className="fas fa-spinner fa-spin"></i>
-                                ) : (
-                                  <i className={`fas ${
-                                    part.quantity === 0 ? 'fa-times-circle' :
-                                    part.quantity < 5 ? 'fa-exclamation-triangle' : 'fa-check-circle'
+
+                                <i className={`fas ${part.quantity === 0 ? 'fa-times-circle' :
+                                  part.quantity < 5 ? 'fa-exclamation-triangle' : 'fa-check-circle'
                                   }`}></i>
-                                )}
+
                                 {part.quantity}
                               </span>
                               {user?.role === 'admin' && (
-                                <button 
+                                <button
                                   className="quantity-btn"
                                   onClick={() => handleQuickQuantityUpdate(product.id, part.id, part.quantity + 1)}
-                                  disabled={loadingStates[`quick-${part.id}`]}
+                                //disabled={}
                                 >
                                   <i className="fas fa-plus"></i>
                                 </button>
                               )}
                             </div>
                           </td>
+                          <td className="quantity-cell">
+                            <div className="quantity-control">
+                              <button
+                                className="quantity-btn"
+                                onClick={() => handleReworkUpdate(product.id, part.id, part.rework - 1)}>-</button>
+                              <span className='quantity-display '><i className='fas fa-cog'></i>{part.rework}</span>
+                              <button
+                                className="quantity-btn"
+                                onClick={() => handleReworkUpdate(product.id, part.id, part.rework + 1)}
+                                disabled={part.rework >= (part.quantity + part.rework)} >+</button>
+                            </div>
+                          </td>
+
                           <td>{part.vendor}</td>
+                          <td>{part.createdAt
+                            ? new Date(part.createdAt).toLocaleDateString("en-GB")
+                            : "-"
+                          }</td>
                           {user?.role === 'admin' && (
                             <td className="actions-cell">
                               <div className="action-buttons">
-                                <button 
+                                <button
                                   className="btn btn-edit btn-sm"
                                   onClick={() => openEditPopup(product, part)}
                                   title="Edit Part"
                                 >
                                   <i className="fas fa-edit"></i>
                                 </button>
-                                <button 
+                                <button
                                   className="btn btn-delete btn-sm"
                                   onClick={() => openDeletePopup(product, part)}
                                   title="Delete Part"

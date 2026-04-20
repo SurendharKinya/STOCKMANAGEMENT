@@ -641,7 +641,7 @@ body {
   box-shadow: var(--box-shadow);
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.5rem;
   transition: var(--transition);
   border-left: 4px solid transparent;
   position: relative;
@@ -672,6 +672,9 @@ body {
 .stat-card.total-products {
   border-left-color: var(--primary);
 }
+.stat-card.total-rework{
+  border-left-color: var(--danger);
+}
 
 .stat-card.active-products {
   border-left-color: var(--success);
@@ -694,6 +697,7 @@ body {
 .stat-card.total-products .stat-icon { color: var(--primary); }
 .stat-card.active-products .stat-icon { color: var(--success); }
 .stat-card.total-parts .stat-icon { color: var(--info); }
+.stat-card.total-rework .stat-icon { color: var(--danger); }
 .stat-card.total-stocks .stat-icon { color: var(--secondary); }
 
 .stat-content h3 {
@@ -709,6 +713,7 @@ body {
   font-size: 2rem;
   font-weight: 700;
   color: var(--dark);
+  text-align: center;
 }
 
 /* Dashboard Grid */
@@ -1066,22 +1071,18 @@ body {
 /* Table Styles */
 .table-container {
   overflow-x: auto;
-  border-radius: var(--border-radius-sm);
-  border: 1px solid var(--gray-light);
-  box-shadow: var(--box-shadow);
 }
 
 .parts-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
-  background: white;
-  min-width: 800px;
 }
 
 .parts-table th {
   background: var(--gray-light);
   padding: 1rem;
-  text-align: left;
+  text-align: center;
   font-weight: 600;
   color: var(--dark);
   font-size: 0.875rem;
@@ -1093,11 +1094,15 @@ body {
 }
 
 .parts-table td {
-  padding: 1rem;
+  padding: 1.2rem;
+  text-align: center;
   border-bottom: 1px solid var(--gray-light);
   transition: var(--transition-fast);
 }
 
+.parts-table td.part-name {
+  text-align: left;  /* only this column left */
+}
 .part-row:hover {
   background: #f8f9fa;
 }
@@ -1113,10 +1118,26 @@ body {
   font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center; /* ✅ FIX */
+  text-align: left;
+}
+.part-name-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 300px;  /* ✅ increase */
+}
+
+.part-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
 }
 
 /* Stock Status Colors */
+
+
 .part-row.out-of-stock {
   background: rgba(247, 37, 133, 0.05);
   border-left: 4px solid var(--danger);
@@ -1142,6 +1163,8 @@ body {
 
 .quantity-display {
   display: flex;
+  color: red;
+  background-color: rgba(246, 1, 1, 0.218);
   align-items: center;
   gap: 0.5rem;
   padding: 0.25rem 0.75rem;
@@ -1169,6 +1192,8 @@ body {
   background: rgba(72, 149, 239, 0.1);
   color: var(--info);
 }
+
+
 
 .status-badge {
   padding: 0.125rem 0.5rem;

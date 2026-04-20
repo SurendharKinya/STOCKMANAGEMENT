@@ -10,9 +10,10 @@ const Dashboard = ({ products, user, allProducts }) => {
     const totalStocks = productData.parts.reduce((sum, part) => sum + part.quantity, 0)
     const incomingStocks = productData.parts.filter(part => part.isNew).length
     const outOfStocks = productData.parts.filter(part => part.quantity === 0).length
+    const totalReworks = productData.parts.reduce((sum,part)=>sum+part.rework,0)
     const lowStocks = productData.parts.filter(part => part.quantity > 0 && part.quantity < 5).length
     
-    return { totalParts, totalStocks, incomingStocks, outOfStocks, lowStocks }
+    return { totalParts, totalStocks,totalReworks, incomingStocks, outOfStocks, lowStocks }
   }
 
   const handleStockClick = (productName, filterType) => {
@@ -22,10 +23,11 @@ const Dashboard = ({ products, user, allProducts }) => {
         filterType: filterType
       }
     })
-  }
+  } 
 
   const getTotalStats = () => {
     const totalProducts = allProducts.length
+    const totalRework=products.reduce((sum,part)=>sum+part.parts.reduce((sum,part)=>sum+part.rework,0),0)
     const activeProducts = allProducts.filter(product => {
       const productData = products.find(p => p.id === product.id)
       return productData && productData.parts.length > 0
@@ -36,7 +38,7 @@ const Dashboard = ({ products, user, allProducts }) => {
       sum + product.parts.reduce((partSum, part) => partSum + part.quantity, 0), 0
     )
 
-    return { totalProducts, activeProducts, totalParts, totalStockItems }
+    return { totalProducts, activeProducts, totalParts,totalRework, totalStockItems }
   }
 
   const totalStats = getTotalStats()
@@ -70,7 +72,19 @@ const Dashboard = ({ products, user, allProducts }) => {
             <div className="stat-number">{totalStats.activeProducts}</div>
           </div>
         </div>
-        
+
+         <div className="stat-card total-rework">
+          <div className="stat-icon">
+            <i className="fas fa-cog"></i>
+          </div>
+          <div className="stat-content">
+            <h3>Total rework</h3>
+            <div className="stat-number">{totalStats.totalRework}</div>
+          </div>
+        </div>
+
+       
+         
         <div className="stat-card total-parts">
           <div className="stat-icon">
             <i className="fas fa-puzzle-piece"></i>
@@ -125,9 +139,16 @@ const Dashboard = ({ products, user, allProducts }) => {
                     </div>
                     <div className="stat-value">{stats.totalStocks}</div>
                   </div>
+                  <div className="stat-item bg-red-200 text-red-700">
+                    <div className="stat-label ">
+                      <i className="fas fa-cog"></i>
+                      <strong>Rework</strong>
+                    </div>
+                    <div className="stat-value">{stats.totalReworks}</div>
+                  </div>
                   
                   <div 
-                    className={`stat-item clickable incoming ${stats.incomingStocks > 0 ? 'has-data' : ''}`}
+                    className={`stat-item bg-green-200 text-green-800 clickable incoming ${stats.incomingStocks > 0 ? 'has-data' : ''}`}
                     onClick={() => stats.incomingStocks > 0 && handleStockClick(product.name, 'incomingStock')}
                   >
                     <div className="stat-label">
