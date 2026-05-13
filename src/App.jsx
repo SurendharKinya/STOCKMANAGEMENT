@@ -18,7 +18,8 @@ const allProducts = [
   { id: 6, name: 'ANT_VIT', icon: 'fas fa-capsules' },
   { id: 7, name: 'SCREWS-M', icon: 'fas fa-cogs' },
   { id: 8, name: 'POWDER-COAT', icon: 'fas fa-paint-roller' },
-  { id: 9, name: 'Tools', icon: 'fas fa-tools' }
+  { id: 9, name: 'Tools', icon: 'fas fa-tools' },
+  { id: 10, name: 'PANEL-STICKER', icon: 'fa-brands fa-stack-overflow' }
 ]
 
 function AppContent() {
